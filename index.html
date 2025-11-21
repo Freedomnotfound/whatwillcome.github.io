@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>终极生产级双向抽屉模板（已解决输入法遮挡 + 动画）</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; }
+    .scroller { 
+      height: 100dvh; /* 关键：动态视口高度 */
+      overflow-y: auto; 
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: none;
+    }
+    /* 输入法弹出时自动调整底部栏位置 */
+    .footer-safe {
+      transition: transform 300ms cubic-bezier(0.2, 0.8, 0.4, 1);
+    }
+    
+    .topbar {
+      width: 100%;
+      height: 44px;
+      display: flex;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .left, .spacer, .search-area, .menu {
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .left {
+      width: 25%;
+      justify-content: center;
+      
+    }
+
+    .spacer {
+      width: 5%;
+    }
+
+    .search-area {
+      width: 65%;
+      justify-content: center;
+    }
+
+    /* GitHub 风格输入框 */
+    .search-input {
+      height: 32px;
+      width: 192px;
+      max-width: 260px;
+      padding: 0 12px;
+      font-size: 14px;
+
+      border: 0px solid #d0d7de;
+      border-radius: 10px;
+      background-color: rgba(245,245,245,255);
+
+      outline: none;
+      transition: 0.15s;
+    }
+    
+    .search-input::placeholder {
+      color: #999;       /* 提示文字颜色 */
+      opacity: 1;        /* Safari 修复 */
+      font-size: 14px;   /* 字体大小 */
+    }
+
+    .search-input:focus {
+      background: white;
+      border-color: #0969da;
+      box-shadow: 0 0 0 3px rgba(9,105,218,0.3);
+    }
+
+    .menu {
+      width: 20%;
+      justify-content: center;
+      opacity: 0.5;
+    }
+
+    /* 汉堡菜单按钮 */
+    .menu-btn {
+      width: 26px;
+      height: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+
+    .menu-btn span {
+      height: 3px;
+      background: #444;
+      border-radius: 2px;
+    }
+    
+    /* 叠加层和卡片样式 */
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0px;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      display: flex;
+      justify-content: left;
+      align-items: center;
+      z-index: 2000;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease;
+    }
+    
+    .overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .card {
+      background: white;
+      left:12px;
+      border-radius: 11px;
+      padding: 30px;
+      max-width: 500px;
+      width: 80%;
+      height:90%;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      position: relative;
+      transform: translateX(-50px);
+      opacity: 0;
+      transition: all 0.4s ease;
+    }
+    
+    .overlay.active .card {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    
+    .card h2 {
+      color: #333;
+      margin-bottom: 15px;
+    }
+    
+    .card p {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    
+    .card button {
+      background: #4a6cf7;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+
+<div x-data="app()" class="scroller" x-ref="scroller">
+
+  <!-- ==================== 顶栏 ==================== -->
+  <header class="fixed top-0 inset-x-0 h-11 bg-white shadow-sm z-50 flex items-center"
+          :style="{ transform: `translate3d(0, ${headerY}px, 0)` }"
+          style="will-change: transform; backface-visibility: hidden;">
+    
+    <div class="topbar">
+      <div class="left">
+        <svg t="1763598496197" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1701" width="26" height="26"><path d="M512 32c265.6 0 480 214.4 480 480S777.6 992 512 992 32 777.6 32 512 246.4 32 512 32z m-61.866667 529.066667H448c-5.333333 1.066667-9.6 5.333333-9.6 11.733333v122.666667c1.066667 5.333333 5.333333 9.6 11.733333 9.6H577.066667c5.333333-1.066667 9.6-5.333333 9.6-11.733334V569.6c-1.066667-5.333333-6.4-9.6-11.733334-9.6l-124.8 1.066667zM475.733333 224h-3.2c-7.466667 1.066667-13.866667 6.4-18.133333 12.8L227.2 681.6l-1.066667 3.2c-5.333333 12.8 1.066667 20.266667 13.866667 20.266667h75.733333c8.533333-1.066667 11.733333-3.2 16-12.8L512 334.933333l180.266667 357.333334 2.133333 3.2c4.266667 7.466667 8.533333 9.6 18.133333 9.6h75.733334c11.733333-1.066667 17.066667-9.6 9.6-22.4L569.6 236.8l-2.133333-2.133333c-4.266667-6.4-11.733333-10.666667-19.2-10.666667h-72.533334z" fill="#FA6400" p-id="1702"></path></svg>
+      </div>
+
+
+<div class="left" style="opacity: 0.5;">
+ <!-- 让添加按钮变得更淡(浅色模式下) -->
+
+<svg t="1763602189172" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="21896" width="22" height="22"><path d="M482 152h60q8 0 8 8v704q0 8-8 8h-60q-8 0-8-8V160q0-8 8-8z" p-id="21897"></path><path d="M176 474h672q8 0 8 8v60q0 8-8 8H176q-8 0-8-8v-60q0-8 8-8z" p-id="21898"></path></svg>
+</div>
+
+
+
+
+
+      <div class="spacer"></div>
+
+      <div class="search-area">
+        <input type="text" class="search-input" placeholder="搜索对话、设置...."/>
+      </div>
+
+      <div class="menu">
+        <svg @click="overlayOpen = true" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cursor-pointer"><line x1="4" y1="6" x2="20" y2="6" style="transform:none;transform-origin:50% 50%;transform-box:fill-box"></line><line x1="4" y1="12" x2="20" y2="12" opacity="1"></line><line x1="4" y1="18" x2="20" y2="18" style="transform:none;transform-origin:50% 50%;transform-box:fill-box"></line></svg>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 叠加层和卡片 ==================== -->
+  <div class="overlay" :class="{ 'active': overlayOpen }" @click="overlayOpen = false">
+    <div class="card" @click.stop>
+      <h2>欢迎使用我们的服务</h2>
+      <p>这是一个从左侧淡入的圆角卡片示例。点击卡片外部区域可以关闭此窗口，点击卡片内部不会触发关闭。</p>
+      <button @click="overlayOpen = false">确定</button>
+    </div>
+  </div>
+
+  <!-- ==================== 底部输入栏（自动避开输入法） ==================== -->
+  <footer class="fixed bottom-0 inset-x-0 bg-white border-t z-50 flex items-center px-4 gap-3 footer-safe"
+          :class="{ 'pb-safe': isKeyboardOpen }"
+          :style="{
+            height: `${footerHeight}px`,
+            transform: `translate3d(0, ${footerY + (isKeyboardOpen ? keyboardOffset : 0)}px, 0)`
+          }"
+          style="will-change: transform; backface-visibility: hidden;">
+    <input 
+      x-ref="input"
+      @focus="handleInputFocus"
+      @blur="handleInputBlur"
+      type="text" 
+      placeholder="说点什么..." 
+      class="flex-1 h-12 px-4 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500">
+    <button class="p-3 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9-7-9-7v5H3v4h9v5z"/>
+      </svg>
+    </button>
+  </footer>
+
+  <!-- ==================== 内容区 ==================== -->
+  <main class="relative bg-gray-100 min-h-screen"
+        :style="{
+          paddingTop: `${headerHeight - headerY}px`,
+          paddingBottom: `${footerHeight - footerY}px`,
+          transform: `translate3d(0, ${headerY}px, 0)`
+        }"
+        style="will-change: transform;">
+    <article class="max-w-3xl mx-auto pt-8 pb-32 px-6 space-y-20">
+      <h2 class="text-3xl font-bold text-center">生产级完整模板</h2>
+      <p class="text-center text-gray-600">输入框再也不会被键盘遮挡，所有弹层都有丝滑动画</p>
+      <template x-for="i in 50">
+        <div class="bg-white rounded-2xl shadow-sm p-8">
+          <h3 class="text-xl font-semibold mb-4">内容 <span x-text="i"></span></h3>
+          <p class="text-gray-600">点击底部输入框试试，输入法弹出时底部栏会自动上移！</p>
+        </div>
+      </template>
+    </article>
+  </main>
+</div>
+
+<script>
+function app() {
+  return {
+    headerHeight: 44,
+    footerHeight: 80,
+    headerY: 0,
+    footerY: 0,
+    lastScrollY: 0,
+
+    // 弹层状态
+    sidebarOpen: false,
+    searchOpen: false,
+    menuOpen: false,
+    overlayOpen: false, // 新增：叠加层状态
+
+    // 输入法状态
+    isKeyboardOpen: false,
+    keyboardOffset: 0,
+    originalHeight: window.innerHeight,
+
+    init() {
+      const scroller = this.$refs.scroller;
+
+      // 核心：每帧更新抽屉
+      const loop = () => {
+        const currentY = scroller.scrollTop;
+        const delta = currentY - this.lastScrollY;
+        if (delta !== 0) {
+          this.headerY = Math.max(-this.headerHeight, Math.min(0, this.headerY - delta));
+          this.footerY = Math.max(0, Math.min(this.footerHeight, this.footerY + delta));
+          this.lastScrollY = currentY;
+        }
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+
+      // 监听键盘弹出（iOS & Android 通用方案）
+      window.addEventListener('resize', () => {
+        const currentHeight = window.innerHeight;
+        if (currentHeight < this.originalHeight - 100) {
+          // 键盘弹出
+          this.isKeyboardOpen = true;
+          this.keyboardOffset = this.originalHeight - currentHeight;
+        } else {
+          // 键盘收起
+          this.isKeyboardOpen = false;
+          this.keyboardOffset = 0;
+        }
+      });
+    },
+
+    handleInputFocus() {
+      // iOS 需要延迟一下才能准确获取键盘高度
+      setTimeout(() => {
+        this.$refs.input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    },
+
+    handleInputBlur() {
+      // 可选：收起时滚动回原位
+    }
+  };
+}
+</script>
+</body>
+</html>
